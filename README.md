@@ -1,5 +1,6 @@
 # Subsurface drill-target ranking — probabilistic, uncertainty-aware
 
+[![CI](https://github.com/Pr0spektor/subsurface-target-ranking/actions/workflows/ci.yml/badge.svg)](https://github.com/Pr0spektor/subsurface-target-ranking/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 A reference implementation of the core exploration-analytics workflow behind AI-native subsurface
@@ -34,7 +35,8 @@ allows the method to be scored quantitatively — something field data alone can
 3. **Detection** — local maxima of the (denoised) analytic signal with non-max suppression + border
    masking; reduction-independent, so peaks sit over sources.
 4. **Depth** — analytic-signal **half-width** estimator (robust for compact sources), with a single
-   constant calibrated on the forward model (depth ≈ 1.75 × half-width; validated to ~10%).
+   constant calibrated on the forward model (depth ≈ 1.75 × half-width); recovers source depth to a
+   mean error of ≈50 m across the test targets (see depth-recovery figure).
 5. **Probabilistic ranking** (`src/targeting.py`) — Monte-Carlo over noise realisations yields, per
    target, a **detection probability**, a **depth median + interquartile spread**, and a score.
 6. **Validation** (`src/pipeline.py`) — matches ranked targets to known truth and reports recovery.
@@ -43,17 +45,24 @@ allows the method to be scored quantitatively — something field data alone can
 ```bash
 pip install -r requirements.txt
 python -m src.pipeline          # synthetic demo -> results/ figures + CSVs
+pytest -q                        # test suite (physics + recovery)
 ```
 
 ### On real data
-`src/real_data.py` loads a **real open aeromagnetic survey** (Lightning Creek, Mount Isa, via
-`ensaio`) and grids it with `verde`; the same `targeting.monte_carlo_rank(...)` then runs unchanged.
+`src/real_data.py` loads a **real open aeromagnetic survey** (Great Britain, BGS, via `ensaio`),
+projects and grids it with `verde`; the same `targeting.monte_carlo_rank(...)` then runs unchanged.
 Needs a scientific-Python env with internet:
 ```bash
-pip install ensaio verde harmonica pooch
-python -c "from src import real_data, targeting as tg; g=real_data.load_lightning_creek(); \
-           t,_=tg.monte_carlo_rank(g['tmi'],g['dx'],g['E'],g['N'],g['cfg']); print(t[:5])"
+pip install ensaio verde pyproj pooch
+python -c "from src import real_data, targeting as tg; g=real_data.load_britain_magnetic(); \
+           t,_=tg.monte_carlo_rank(g['tmi'],g['dx'],g['E'],g['N'],g['cfg'],n_runs=60); print(t[:5])"
 ```
+
+## Tests & CI
+`pytest -q` runs a suite covering the forward-model localisation, reduction-to-pole identity at the
+pole, the FFT vertical derivative, monotonicity of the depth estimator, and end-to-end truth
+recovery. GitHub Actions runs the tests and the full pipeline on every push
+(`.github/workflows/ci.yml`).
 
 ## Layout
 ```
@@ -63,7 +72,9 @@ subsurface-target-ranking/
 │   ├── processing.py      # FFT potential-field operators (RTP, derivatives, analytic signal…)
 │   ├── targeting.py       # detection, depth (half-width + Euler), probabilistic MC ranking
 │   ├── pipeline.py        # end-to-end run + ground-truth validation + figures
-│   └── real_data.py       # real aeromagnetic survey loader (ensaio + verde)
+│   └── real_data.py       # real aeromagnetic survey loader (ensaio + verde, Great Britain/BGS)
+├── tests/                 # pytest suite (physics + recovery)
+├── .github/workflows/     # CI (tests + pipeline on every push)
 ├── results/               # generated figures + ranked_targets.csv + recovery.csv
 ├── requirements.txt · CITATION.cff · LICENSE
 ```

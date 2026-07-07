@@ -2,48 +2,54 @@
 Real-data loader — apply the identical pipeline to a real aeromagnetic survey.
 =============================================================================
 
-The processing/targeting code is grid-agnostic: give it a gridded TMI array with a cell size and a
-field inclination/declination and it runs unchanged. This module fetches a **real, open** magnetic
-survey via `ensaio` (Fatiando's curated real datasets) and grids it with `verde`.
+The processing/targeting code is grid-agnostic: give it a gridded TMI array, a cell size and the
+field inclination/declination and it runs unchanged. This module loads a **real, open** aeromagnetic
+survey (Great Britain, British Geological Survey) via `ensaio`, projects and grids it with `verde`,
+and returns it in the exact structure the pipeline expects.
 
-These packages need internet + a scientific-Python environment, so run this in Colab or locally
-(`pip install ensaio harmonica verde pooch`), not in a restricted sandbox.
+Requires a scientific-Python environment with internet (Colab or local):
+    pip install ensaio verde pyproj pooch
 
 Example
 -------
-    from src import real_data, targeting as tg, processing as pf
-    grid = real_data.load_lightning_creek()          # real Queensland aeromagnetic survey
-    targets, detr = tg.monte_carlo_rank(grid["tmi"], grid["dx"], grid["E"], grid["N"], grid["cfg"])
+    from src import real_data, targeting as tg
+    g = real_data.load_britain_magnetic(spacing=2000.0)
+    targets, _ = tg.monte_carlo_rank(g["tmi"], g["dx"], g["E"], g["N"], g["cfg"], n_runs=60)
 """
 from __future__ import annotations
+from types import SimpleNamespace
 import numpy as np
 
 
-def load_lightning_creek(spacing=200.0):
-    """Real Lightning Creek aeromagnetic survey (Mount Isa, Queensland) via ensaio + verde.
+def load_britain_magnetic(spacing: float = 2000.0):
+    """Great Britain aeromagnetic anomaly (BGS), projected and gridded to `spacing` metres."""
+    import ensaio
+    import pandas as pd
+    import pyproj
+    import verde as vd
 
-    Returns a dict with the same keys the pipeline expects: E, N (grids), tmi, dx, cfg.
-    """
-    import ensaio, pandas as pd, verde as vd
-    from types import SimpleNamespace
+    fname = ensaio.fetch_britain_magnetic(version=1)
+    data = pd.read_csv(fname)
+    field = data["total_field_anomaly_nt"].to_numpy()
 
-    fname = ensaio.fetch_lightning_creek_magnetic(version=1)
-    df = pd.read_csv(fname)
-    # project lon/lat to metres and grid the total-field anomaly
-    proj = vd.projection.pyproj_wrap if hasattr(vd, "projection") else None
-    coords = (df["easting_m"].values, df["northing_m"].values) if "easting_m" in df else \
-             (df["longitude"].values, df["latitude"].values)
-    field = df["total_field_anomaly_nt"].values if "total_field_anomaly_nt" in df else \
-            df.filter(like="anomaly").iloc[:, 0].values
-    grd = vd.grid_coordinates(vd.get_region(coords), spacing=spacing)
-    tmi = vd.KNeighbors().fit(coords, field).grid(coordinates=grd).scalars.values
-    E, N = grd
-    cfg = SimpleNamespace(inc_deg=-52.0, dec_deg=6.0, noise_nT=float(np.nanstd(field) * 0.02))
-    return {"E": E, "N": N, "tmi": np.nan_to_num(tmi, nan=np.nanmean(tmi)),
-            "dx": spacing, "cfg": cfg, "truth": np.empty((0, 4))}
+    proj = pyproj.Proj(proj="merc", lat_ts=float(data["latitude"].mean()))
+    easting, northing = proj(data["longitude"].to_numpy(), data["latitude"].to_numpy())
+    coords = (easting, northing)
+
+    # de-spike / decimate to the target resolution, then grid with nearest-neighbour
+    block_coords, block_field = vd.BlockReduce(np.median, spacing=spacing).filter(coords, field)
+    grd = vd.KNeighbors().fit(block_coords, block_field)
+    ds = grd.grid(spacing=spacing, data_names="tmi")
+
+    E, N = np.meshgrid(ds.easting.to_numpy(), ds.northing.to_numpy())
+    tmi = np.nan_to_num(ds.tmi.to_numpy(), nan=float(np.nanmedian(ds.tmi.to_numpy())))
+    # Britain reference field (approx): inclination ~66 deg, declination ~ -1 deg
+    cfg = SimpleNamespace(inc_deg=66.0, dec_deg=-1.0, noise_nT=float(np.nanstd(field) * 0.02))
+    return {"E": E, "N": N, "tmi": tmi, "dx": spacing, "cfg": cfg,
+            "truth": np.empty((0, 4))}
 
 
 if __name__ == "__main__":
-    g = load_lightning_creek()
-    print("real grid", g["E"].shape, "dx", g["dx"], "TMI nT", round(float(np.nanmin(g["tmi"])), 1),
-          round(float(np.nanmax(g["tmi"])), 1))
+    g = load_britain_magnetic()
+    print("real grid", g["E"].shape, "dx", g["dx"],
+          "TMI nT", round(float(np.nanmin(g["tmi"])), 1), round(float(np.nanmax(g["tmi"])), 1))

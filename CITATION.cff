@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+title: "Subsurface drill-target ranking — probabilistic, uncertainty-aware"
+message: "If you use this software, please cite it using these metadata."
+type: software
+authors:
+  - alias: Pr0spektor
+repository-code: "https://github.com/Pr0spektor/subsurface-target-ranking"
+abstract: >-
+  A transparent, NumPy-based demonstration of AI-native mineral-exploration targeting: a physics
+  magnetic forward model, FFT potential-field processing (reduction-to-pole, derivatives, analytic
+  signal), analytic-signal half-width depth estimation, and Monte-Carlo probabilistic drill-target
+  ranking with uncertainty, validated against known ground truth. Includes a real aeromagnetic
+  survey path (ensaio + verde).
+keywords:
+  - geophysics
+  - mineral-exploration
+  - potential-field
+  - drill-targeting
+  - uncertainty-quantification
+  - reduction-to-pole
+license: MIT
+version: "1.0.0"
+date-released: "2026-07-06"

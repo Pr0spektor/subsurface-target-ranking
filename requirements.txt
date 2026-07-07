@@ -1,0 +1,11 @@
+# Core (pipeline + synthetic demo)
+numpy>=1.24
+pandas>=2.0
+matplotlib>=3.7
+
+# Optional — real survey data + advanced inversion (run in Colab / local sci-Python env)
+# ensaio>=0.6      # curated real geophysical datasets
+# verde>=1.8       # gridding / interpolation
+# harmonica>=0.7   # potential-field processing (reference implementations)
+# simpeg>=0.20     # 3-D inversion (see src/real_data.py notes)
+# pooch>=1.8

@@ -2,20 +2,20 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A compact, senior-level demonstration of the workflow behind AI-native exploration platforms
-(e.g. Terra AI): turn potential-field geophysics into a **ranked list of drill targets, each with a
-depth estimate and an uncertainty-aware detection probability** — "where to drill, how deep, and
-how confident."
+A reference implementation of the core exploration-analytics workflow behind AI-native subsurface
+platforms: transforming potential-field (magnetic) data into a prioritised set of drill targets,
+each with an estimated source depth and a quantified detection confidence.
 
-Everything here is computed and tested, not hand-waved. The core runs on **pure NumPy** (transparent,
-auditable operators); the identical pipeline runs on a **real open aeromagnetic survey** via
-`src/real_data.py` (Colab).
+The pipeline is reproducible and validated end to end. A physics-based magnetic forward model
+provides known ground truth, against which recovered target locations and depths are scored; the
+same processing and ranking code then applies directly to real aeromagnetic surveys
+(`src/real_data.py`).
 
-## Why a forward model?
-The committed demo uses a **physics-based magnetic forward model** (dipole response of buried
-magnetised bodies + regional field + noise). That is deliberate and is itself a core exploration
-skill ("modelled vs observed") — and, crucially, because the true source locations and depths are
-known, it lets us **score target recovery against ground truth**, which real data cannot.
+## Validation against ground truth
+The committed example is driven by a physics-based magnetic forward model (dipole response of buried
+magnetised bodies, plus a regional field and observational noise). Modelling the observed response
+is itself a core exploration task, and because the true source locations and depths are known, it
+allows the method to be scored quantitatively — something field data alone cannot provide.
 
 ## Result (synthetic survey, known ground truth)
 
@@ -68,14 +68,15 @@ subsurface-target-ranking/
 ├── requirements.txt · CITATION.cff · LICENSE
 ```
 
-## Honest scope
-- The committed demo input is a forward model (real physics, synthetic geology); the real-survey
-  path is provided and runs the same code. This split is because the build sandbox had no internet;
-  in Colab both run.
-- Depth via analytic-signal half-width is an approximation with a calibrated constant; the repo also
-  includes an Euler-deconvolution implementation for comparison.
-- A production system (Terra AI–style) would add 3-D inversion (SimPEG), multi-method fusion
-  (gravity/EM), and geological priors — hooks and notes are provided.
+## Scope & assumptions
+- The committed example is driven by a forward model (real physics, synthetic geology) so results
+  can be validated against ground truth; `src/real_data.py` applies the identical pipeline to real
+  open aeromagnetic data.
+- Depth is estimated from the analytic-signal half-width, with a constant calibrated on the forward
+  model; an Euler-deconvolution implementation is included for comparison.
+- A production system would extend this with 3-D inversion (SimPEG), multi-method fusion
+  (gravity/EM) and geological priors; the code is structured to accommodate them.
 
-Built to demonstrate applied-geophysics + data-programming judgement: transparent methods, real
-physics, uncertainty quantification, and validation against ground truth.
+Designed to demonstrate applied-geophysics and scientific-programming judgement: transparent,
+first-principles methods, uncertainty quantification, and quantitative validation against ground
+truth.

@@ -1,6 +1,6 @@
 # Subsurface drill-target ranking — probabilistic, uncertainty-aware
 
-[![CI](https://github.com/Pr0spektor/subsurface-target-ranking/actions/workflows/ci.yml/badge.svg)](https://github.com/Pr0spektor/subsurface-target-ranking/actions/workflows/ci.yml)
+[![CI](https://github.com/Pr0spektor/subsurface-target-ranking/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Pr0spektor/subsurface-target-ranking/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 A reference implementation of the core exploration-analytics workflow behind AI-native subsurface

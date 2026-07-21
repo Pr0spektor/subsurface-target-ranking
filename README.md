@@ -12,6 +12,9 @@ provides known ground truth, against which recovered target locations and depths
 same processing and ranking code then applies directly to real aeromagnetic surveys
 (`src/real_data.py`).
 
+![Rtp](results/rtp.png)
+![Tmi observed](results/tmi_observed.png)
+
 ## Validation against ground truth
 The committed example is driven by a physics-based magnetic forward model (dipole response of buried
 magnetised bodies, plus a regional field and observational noise). Modelling the observed response

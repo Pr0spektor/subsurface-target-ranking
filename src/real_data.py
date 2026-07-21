@@ -43,7 +43,7 @@ def load_britain_magnetic(spacing: float = 2000.0):
 
     E, N = np.meshgrid(ds.easting.to_numpy(), ds.northing.to_numpy())
     tmi = np.nan_to_num(ds.tmi.to_numpy(), nan=float(np.nanmedian(ds.tmi.to_numpy())))
-    # Britain reference field (approx): inclination ~66 deg, declination ~ -1 deg
+    # Britain reference field (approx): inclination ≈66 deg, declination ≈ -1 deg
     cfg = SimpleNamespace(inc_deg=66.0, dec_deg=-1.0, noise_nT=float(np.nanstd(field) * 0.02))
     return {"E": E, "N": N, "tmi": tmi, "dx": spacing, "cfg": cfg,
             "truth": np.empty((0, 4))}

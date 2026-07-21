@@ -47,11 +47,11 @@ class SurveyConfig:
 def default_scene():
     """Realistic mineralised bodies (magnetite-bearing): tens–hundreds of nT anomalies."""
     return [
-        Body(-900, -1100, 300, 0.15, 2.0e7),    # strong, shallow (~400 nT)
-        Body(600, 700, 550, 0.10, 2.5e7),       # strong, mid (~75 nT)
-        Body(-1000, 1200, 800, 0.20, 4.0e7),    # deep but strong (~90 nT)
-        Body(1100, -800, 450, 0.08, 1.5e7),     # moderate (~60 nT)
-        Body(-200, 200, 950, 0.03, 5.0e6),      # weak/deep decoy (~1 nT, near noise)
+        Body(-900, -1100, 300, 0.15, 2.0e7),    # strong, shallow (≈400 nT)
+        Body(600, 700, 550, 0.10, 2.5e7),       # strong, mid (≈75 nT)
+        Body(-1000, 1200, 800, 0.20, 4.0e7),    # deep but strong (≈90 nT)
+        Body(1100, -800, 450, 0.08, 1.5e7),     # moderate (≈60 nT)
+        Body(-200, 200, 950, 0.03, 5.0e6),      # weak/deep decoy (≈1 nT, near noise)
     ]
 
 

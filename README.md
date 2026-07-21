@@ -24,7 +24,7 @@ allows the method to be scored quantitatively — something field data alone can
 
 - **4 / 5 bodies recovered** at **100% detection probability**; the 5th is a weak, deep decoy
   correctly rejected (a true negative — honest behaviour, not cherry-picking).
-- **Mean horizontal error ≈ 100 m** (~3 grid cells); **mean depth error ≈ 51 m**.
+- **Mean horizontal error ≈ 100 m** (≈3 grid cells); **mean depth error ≈ 51 m**.
 
 ![Depth recovery](results/depth_recovery.png)
 

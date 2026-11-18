@@ -27,7 +27,8 @@ allows the method to be scored quantitatively — something field data alone can
 
 - **4 / 5 bodies recovered** at **100% detection probability**; the 5th is a weak, deep decoy
   correctly rejected (a true negative — honest behaviour, not cherry-picking).
-- **Mean horizontal error ≈ 100 m** (≈3 grid cells); **mean depth error ≈ 51 m**.
+- **Mean horizontal error ≈ 100 m** (≈3 grid cells); **mean depth error ≈ 14 m**
+  (was 51 m before the estimator was rebuilt on an azimuthally averaged profile).
 
 ![Depth recovery](results/depth_recovery.png)
 
@@ -37,9 +38,13 @@ allows the method to be scored quantitatively — something field data alone can
    vertical derivatives, upward continuation, analytic signal, tilt angle.
 3. **Detection** — local maxima of the (denoised) analytic signal with non-max suppression + border
    masking; reduction-independent, so peaks sit over sources.
-4. **Depth** — analytic-signal **half-width** estimator (robust for compact sources), with a single
-   constant calibrated on the forward model (depth ≈ 1.75 × half-width); recovers source depth to a
-   mean error of ≈50 m across the test targets (see depth-recovery figure).
+4. **Depth** — analytic-signal **half-width** from the *azimuthally averaged* radial profile:
+   the amplitude is averaged over annuli before the half-amplitude crossing is interpolated, so a
+   single noisy pixel cannot set the radius. The conversion is a fitted line,
+   `depth = -168 + 1.904 × halfwidth`, calibrated by `src/calibrate_depth.py` on 20 single-body
+   synthetic scenes (250–700 m, five noise seeds; R² = 0.999, residual sd 5 m, max error 13 m).
+   Held out at 800–950 m the error stays within ≈35 m; on the demo scene the mean depth error is
+   ≈14 m. Below the noise floor (peak < 0.2 nT) the estimate is reported as missing, not guessed.
 5. **Probabilistic ranking** (`src/targeting.py`) — Monte-Carlo over noise realisations yields, per
    target, a **detection probability**, a **depth median + interquartile spread**, and a score.
 6. **Validation** (`src/pipeline.py`) — matches ranked targets to known truth and reports recovery.

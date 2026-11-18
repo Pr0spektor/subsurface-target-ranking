@@ -6,6 +6,12 @@ Conventions: grid [row=North, col=East]; component order [East, North, Down].
 from __future__ import annotations
 import numpy as np
 from . import processing as pf
+from . import forward_model as fm
+
+# A peak inside the search radius is only the *same* target if its amplitude is comparable to
+# the base run. A much stronger or much weaker anomaly at the same spot is a different source,
+# and counting it would push detection probability towards 1.0 regardless of the physics.
+AMP_MATCH = (0.4, 2.5)
 
 
 def detect_peaks(asig, E, N, dx, top_k=8, min_sep_m=700.0, percentile=90, border=6):
@@ -142,7 +148,10 @@ def monte_carlo_rank(tmi, dx, E, N, cfg, n_runs=150, seed=1, top_k=8):
     tol = 400.0
     hits = np.zeros(len(base)); amps = np.zeros(len(base)); depths = [[] for _ in base]
     for _ in range(n_runs):
-        g = tmi + rng.normal(0, cfg.noise_nT, tmi.shape)
+        clutter = np.zeros_like(tmi)
+        for b in fm.clutter_bodies(cfg, rng):
+            clutter += fm.body_tmi(cfg, b, E, N)
+        g = tmi + clutter + rng.normal(0, cfg.noise_nT, tmi.shape)
         d, _ = pf.polynomial_detrend(g, E, N, order=1)
         asig = pf.analytic_signal(pf.upward_continue(d, dx, 100.0), dx)  # mild denoise
         peaks = detect_peaks(asig, E, N, dx, top_k=top_k + 3, percentile=85)
@@ -150,10 +159,15 @@ def monte_carlo_rank(tmi, dx, E, N, cfg, n_runs=150, seed=1, top_k=8):
             near = [p for p in peaks if np.hypot(p["east"] - bc["east"], p["north"] - bc["north"]) <= tol]
             if near:
                 p = max(near, key=lambda z: z["amp"])
-                hits[i] += 1; amps[i] += p["amp"]
+                ratio = (p["amp"] / bc["amp"]) if bc["amp"] else 0.0
+                if not (AMP_MATCH[0] <= ratio <= AMP_MATCH[1]):
+                    continue
                 dh = depth_halfwidth(asig, E, N, p["iy"], p["ix"], dx)
-                if not np.isnan(dh):
-                    depths[i].append(dh)
+                if np.isnan(dh):
+                    # Euler deconvolution failed on this realisation: a peak without a depth
+                    # is not a drillable target, so it does not count as a detection.
+                    continue
+                hits[i] += 1; amps[i] += p["amp"]; depths[i].append(dh)
     if len(base) == 0:
         return [], detr
     # amps[i] accumulates the amplitude on every hit, so divide by the hit count before

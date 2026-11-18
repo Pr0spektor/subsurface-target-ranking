@@ -113,3 +113,36 @@ def test_depth_estimator_tracks_depth_under_noise():
             errors.append(est - depth)
     assert abs(float(np.mean(errors))) < 40.0, errors
     assert max(abs(e) for e in errors) < 80.0, errors
+
+
+def test_clutter_population_is_bounded_and_varied():
+    from src import forward_model as fm
+    import numpy as np
+    cfg = fm.SurveyConfig()
+    rng = np.random.default_rng(0)
+    bodies = fm.clutter_bodies(cfg, rng)
+    assert len(bodies) == cfg.clutter_count
+    assert all(abs(b.east) <= cfg.extent / 2 for b in bodies)
+    assert len({round(b.depth) for b in bodies}) > 1
+
+
+def test_deeper_and_weaker_bodies_produce_smaller_anomalies():
+    from src import forward_model as fm
+    import numpy as np
+    cfg = fm.SurveyConfig()
+    ax = np.linspace(-cfg.extent / 2, cfg.extent / 2, cfg.n)
+    E, N = np.meshgrid(ax, ax)
+    shallow = fm.body_tmi(cfg, fm.Body(0, 0, 200, 0.15, 2.0e7), E, N)
+    deep = fm.body_tmi(cfg, fm.Body(0, 0, 1200, 0.05, 5.0e6), E, N)
+    assert np.abs(shallow).max() > 10 * np.abs(deep).max()
+
+
+def test_detection_probability_is_not_trivially_one():
+    from src import forward_model as fm
+    from src import targeting as tg
+    cfg = fm.SurveyConfig()
+    g = fm.tmi_grid(cfg, fm.default_scene())
+    out, _ = tg.monte_carlo_rank(g["tmi"], g["dx"], g["E"], g["N"], cfg, n_runs=40, seed=3)
+    probs = [t["detection_prob"] for t in out]
+    assert probs and max(probs) <= 1.0
+    assert min(probs) < 0.95, "every target detected on every run: the noise model is too clean"

@@ -42,6 +42,13 @@ class SurveyConfig:
     noise_nT: float = 2.0
     regional_amp_nT: float = 60.0
     seed: int = 11
+    # Unknown near-surface sources ("clutter"). Real surveys are limited by geology and
+    # culture, not by sensor noise: without clutter every anomaly is found on every run and
+    # a "detection probability" of 1.0 is an artefact of the noise model, not a result.
+    clutter_count: int = 14
+    clutter_depth_m: tuple = (80.0, 1200.0)
+    clutter_susceptibility: tuple = (0.01, 0.09)
+    clutter_volume_log10: tuple = (6.0, 7.3)
 
 
 def default_scene():
@@ -55,21 +62,41 @@ def default_scene():
     ]
 
 
+def body_tmi(cfg: SurveyConfig, body: Body, E, N):
+    """TMI of a single induced dipole, in nT, on the survey grid."""
+    Fhat = field_unit_vector(cfg.inc_deg, cfg.dec_deg)
+    B0 = cfg.field_strength
+    m = (body.susceptibility / MU0) * (B0 * 1e-9) * Fhat * body.volume    # [E,N,Down]
+    rE, rN, rD = E - body.east, N - body.north, (cfg.height + body.depth)
+    r = np.sqrt(rE**2 + rN**2 + rD**2) + 1e-6
+    rhat = np.stack([rE, rN, rD * np.ones_like(rE)]) / r
+    mdotr = m[0] * rhat[0] + m[1] * rhat[1] + m[2] * rhat[2]
+    Bvec = (MU0 / (4 * np.pi)) * (3 * mdotr * rhat - m[:, None, None]) / r**3
+    return (Bvec[0] * Fhat[0] + Bvec[1] * Fhat[1] + Bvec[2] * Fhat[2]) * 1e9
+
+
+def clutter_bodies(cfg: SurveyConfig, rng):
+    """A random population of unknown near-surface bodies for one Monte-Carlo realisation."""
+    half = cfg.extent / 2
+    out = []
+    for _ in range(int(cfg.clutter_count)):
+        out.append(Body(
+            east=float(rng.uniform(-half, half)),
+            north=float(rng.uniform(-half, half)),
+            depth=float(rng.uniform(*cfg.clutter_depth_m)),
+            susceptibility=float(rng.uniform(*cfg.clutter_susceptibility)),
+            volume=float(10 ** rng.uniform(*cfg.clutter_volume_log10)),
+        ))
+    return out
+
+
 def tmi_grid(cfg: SurveyConfig, bodies):
     rng = np.random.default_rng(cfg.seed)
     ax = np.linspace(-cfg.extent / 2, cfg.extent / 2, cfg.n)
     E, N = np.meshgrid(ax, ax)                 # E along columns, N along rows
-    Fhat = field_unit_vector(cfg.inc_deg, cfg.dec_deg)
-    B0 = cfg.field_strength
     tmi = np.zeros_like(E)
     for b in bodies:
-        m = (b.susceptibility / MU0) * (B0 * 1e-9) * Fhat * b.volume    # [E,N,Down]
-        rE, rN, rD = E - b.east, N - b.north, (cfg.height + b.depth)
-        r = np.sqrt(rE**2 + rN**2 + rD**2) + 1e-6
-        rhat = np.stack([rE, rN, rD * np.ones_like(rE)]) / r
-        mdotr = m[0] * rhat[0] + m[1] * rhat[1] + m[2] * rhat[2]
-        Bvec = (MU0 / (4 * np.pi)) * (3 * mdotr * rhat - m[:, None, None]) / r**3
-        tmi += (Bvec[0] * Fhat[0] + Bvec[1] * Fhat[1] + Bvec[2] * Fhat[2]) * 1e9
+        tmi += body_tmi(cfg, b, E, N)
     reg = cfg.regional_amp_nT * (0.6 * E / cfg.extent + 0.4 * N / cfg.extent
                                  + 0.3 * E * N / cfg.extent**2)
     noise = rng.normal(0, cfg.noise_nT, E.shape)

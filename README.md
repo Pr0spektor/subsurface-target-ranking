@@ -25,9 +25,11 @@ allows the method to be scored quantitatively — something field data alone can
 
 ![Targets](results/targets.png)
 
-- **4 / 5 bodies recovered** at **100% detection probability**; the 5th is a weak, deep decoy
-  correctly rejected (a true negative — honest behaviour, not cherry-picking).
-- **Mean horizontal error ≈ 100 m** (≈3 grid cells); **mean depth error ≈ 14 m**
+- **4 / 5 bodies recovered** with detection probabilities of **0.99, 0.86, 0.81 and 0.21**; the
+  5th is a weak, deep decoy correctly rejected (a true negative — honest behaviour, not
+  cherry-picking). The 0.21 is the point: a 60 nT body at 450 m is found in one run in five, and
+  the ranking says so instead of printing 100%.
+- **Mean horizontal error ≈ 100 m** (≈3 grid cells); **mean depth error ≈ 16 m**
   (was 51 m before the estimator was rebuilt on an azimuthally averaged profile).
 
 ![Depth recovery](results/depth_recovery.png)
@@ -47,6 +49,11 @@ allows the method to be scored quantitatively — something field data alone can
    ≈14 m. Below the noise floor (peak < 0.2 nT) the estimate is reported as missing, not guessed.
 5. **Probabilistic ranking** (`src/targeting.py`) — Monte-Carlo over noise realisations yields, per
    target, a **detection probability**, a **depth median + interquartile spread**, and a score.
+   Each realisation adds a random population of unknown near-surface bodies (clutter, 14 per run,
+   80–1200 m deep) on top of sensor noise, because real surveys are limited by geology rather
+   than by the magnetometer. A peak counts as a detection only if it lies within 400 m **and**
+   its amplitude is within 0.4–2.5x the base run **and** Euler deconvolution returns a depth:
+   a peak without a depth is not a drillable target.
 6. **Validation** (`src/pipeline.py`) — matches ranked targets to known truth and reports recovery.
 
 ## Run

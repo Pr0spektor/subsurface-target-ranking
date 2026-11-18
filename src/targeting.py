@@ -45,7 +45,7 @@ def depth_halfwidth(asig, E, N, iy, ix, dx, k=DEPTH_K, rmax_m=800.0):
     peak = asig[iy, ix]
     if peak <= 0:
         return np.nan
-    rr = int(rmax_m / dx)
+    rr = max(int(round(rmax_m / dx)), 1)
     ny, nx = asig.shape
     sl = (slice(max(iy - rr, 0), min(iy + rr + 1, ny)),
           slice(max(ix - rr, 0), min(ix + rr + 1, nx)))
@@ -94,17 +94,29 @@ def monte_carlo_rank(tmi, dx, E, N, cfg, n_runs=150, seed=1, top_k=8):
                 dh = depth_halfwidth(asig, E, N, p["iy"], p["ix"], dx)
                 if not np.isnan(dh):
                     depths[i].append(dh)
-    amax = amps.max() or 1.0
+    if len(base) == 0:
+        return [], detr
+    # amps[i] accumulates the amplitude on every hit, so divide by the hit count before
+    # normalising: score must be p x (mean amplitude), not p x (sum) = p^2 x mean.
+    mean_amps = np.divide(amps, hits, out=np.zeros_like(amps), where=hits > 0)
+    amax = mean_amps.max() or 1.0
     out = []
     for i, bc in enumerate(base):
         p = hits[i] / n_runs
-        dz = np.array(depths[i]) if depths[i] else np.array([np.nan])
+        if depths[i]:
+            dz = np.asarray(depths[i], dtype=float)
+            med = float(np.nanmedian(dz))
+            iqr = float(np.nanpercentile(dz, 75) - np.nanpercentile(dz, 25))
+            depth_median = round(med) if np.isfinite(med) else None
+            depth_iqr = round(iqr) if np.isfinite(iqr) else None
+        else:
+            depth_median, depth_iqr = None, None
         out.append({"east": round(bc["east"]), "north": round(bc["north"]),
                     "detection_prob": round(float(p), 3),
-                    "depth_median_m": round(float(np.nanmedian(dz))),
-                    "depth_iqr_m": round(float(np.nanpercentile(dz, 75) - np.nanpercentile(dz, 25))) if depths[i] else np.nan,
-                    "amp_norm": round(float(amps[i] / amax), 3),
-                    "score": round(float(p * amps[i] / amax), 3)})
+                    "depth_median_m": depth_median,
+                    "depth_iqr_m": depth_iqr,
+                    "amp_norm": round(float(mean_amps[i] / amax), 3),
+                    "score": round(float(p * mean_amps[i] / amax), 3)})
     out.sort(key=lambda z: -z["score"])
     for k, z in enumerate(out, 1):
         z["rank"] = k

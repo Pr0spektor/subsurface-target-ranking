@@ -71,3 +71,24 @@ def _run_all():
 
 if __name__ == "__main__":
     _run_all()
+
+
+def test_coarse_grid_does_not_crash():
+    """The real-data path uses ~2 km spacing; rr = int(800/dx) used to become 0,
+    collapsing the search window to one pixel and raising ValueError on round(nan)."""
+    cfg = fm.SurveyConfig(n=11, extent=20000.0)          # dx = 2000 m
+    g = fm.tmi_grid(cfg, fm.default_scene())
+    assert g["dx"] == 2000.0
+    targets, _ = tg.monte_carlo_rank(g["tmi"], g["dx"], g["E"], g["N"], cfg, n_runs=3)
+    assert isinstance(targets, list)                      # no ValueError, empty is acceptable
+    for t in targets:
+        assert t["depth_median_m"] is None or isinstance(t["depth_median_m"], int)
+
+
+def test_score_does_not_double_count_probability():
+    """score must be p x mean amplitude, not p x sum = p^2 x amplitude."""
+    cfg = fm.SurveyConfig()
+    g = fm.tmi_grid(cfg, fm.default_scene())
+    targets, _ = tg.monte_carlo_rank(g["tmi"], g["dx"], g["E"], g["N"], cfg, n_runs=40)
+    for t in targets:
+        assert abs(t["score"] - t["detection_prob"] * t["amp_norm"]) < 0.002

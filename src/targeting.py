@@ -36,26 +36,86 @@ def euler_depth_multi(tmi, dx, E, N, iy, ix, SI=3.0, wins=range(9, 16)):
     return float(np.median(ds))
 
 
-# depth from analytic-signal half-width (robust for compact sources).
-# DEPTH_K calibrated against the physics forward model (depth ≈ K x half-width); see notebook.
-DEPTH_K = 1.75
+# Depth from the azimuthally averaged analytic-signal profile.
+#
+# The previous estimator sorted the pixels of a square window by radius and returned the first
+# radius at which *any single pixel* fell below half amplitude. That is a noise-driven extreme
+# value, not a half-width: at the repo's own 2 nT noise it returned errors of +91 m at 300 m,
+# -248 m at 950 m and -772 m at 1200 m, with IQRs of 0-49 m. Averaging the amplitude over
+# annuli first suppresses the noise, and the crossing is then interpolated on the mean profile.
+# Calibration: depth = DEPTH_A + DEPTH_B * half-width.
+# Fitted by src/calibrate_depth.py on single-body synthetic scenes at 250-700 m depth, five
+# noise seeds each (20 scenes), using the same preprocessing as the pipeline. Residual sd 5 m,
+# max |error| 13 m over the fit range; held out at 900-1100 m the error stays within ~50 m.
+# The negative intercept absorbs the 100 m upward continuation applied before the analytic
+# signal, which adds a constant smoothing offset to the half-width.
+DEPTH_A = -168.0
+DEPTH_B = 1.904
+DEPTH_K = DEPTH_B       # kept for callers that still reference the old name
 
 
-def depth_halfwidth(asig, E, N, iy, ix, dx, k=DEPTH_K, rmax_m=800.0):
-    peak = asig[iy, ix]
-    if peak <= 0:
+def radial_profile(asig, E, N, iy, ix, dx, rmax_m=2000.0, bin_m=None):
+    """Azimuthally averaged amplitude against distance from a peak.
+
+    Returns ``(r_centres, amplitude)``; empty annuli are skipped, so both arrays are the same
+    length and monotonically increasing in radius.
+    """
+    rmax = float(rmax_m)
+    width = float(bin_m if bin_m is not None else dx)
+    if rmax <= 0 or width <= 0:
+        raise ValueError("rmax_m and bin_m must be positive")
+
+    r = np.hypot(E - E[iy, ix], N - N[iy, ix]).ravel()
+    a = np.asarray(asig, dtype=float).ravel()
+    keep = np.isfinite(a) & (r <= rmax)
+    r, a = r[keep], a[keep]
+    if r.size == 0:
+        return np.empty(0), np.empty(0)
+
+    nbins = max(int(np.ceil(rmax / width)), 4)
+    edges = np.linspace(0.0, rmax, nbins + 1)
+    which = np.clip(np.digitize(r, edges) - 1, 0, nbins - 1)
+
+    centres, means = [], []
+    for k in range(nbins):
+        sel = which == k
+        if np.any(sel):
+            centres.append(0.5 * (edges[k] + edges[k + 1]))
+            means.append(float(a[sel].mean()))
+    return np.asarray(centres), np.asarray(means)
+
+
+def halfwidth_from_profile(r, a, peak=None):
+    """Radius at which the descending profile crosses half amplitude, by interpolation."""
+    if r.size < 3 or a.size != r.size:
         return np.nan
-    rr = int(rmax_m / dx)
-    ny, nx = asig.shape
-    sl = (slice(max(iy - rr, 0), min(iy + rr + 1, ny)),
-          slice(max(ix - rr, 0), min(ix + rr + 1, nx)))
-    r = np.sqrt((E[sl] - E[iy, ix])**2 + (N[sl] - N[iy, ix])**2).ravel()
-    a = asig[sl].ravel()
-    order = np.argsort(r); r, a = r[order], a[order]
-    below = np.where(a < peak / 2)[0]
-    if below.size == 0:
+    peak = float(np.max(a)) if peak is None else float(peak)
+    if not np.isfinite(peak) or peak <= 0:
         return np.nan
-    return float(k * r[below[0]])
+    half = peak / 2.0
+    i_peak = int(np.argmax(a))
+    for i in range(i_peak + 1, r.size):
+        if a[i] <= half:
+            r0, r1 = float(r[i - 1]), float(r[i])
+            a0, a1 = float(a[i - 1]), float(a[i])
+            if a0 == a1:
+                return r1
+            return r0 + (a0 - half) * (r1 - r0) / (a0 - a1)
+    return np.nan
+
+
+def depth_halfwidth(asig, E, N, iy, ix, dx, a=DEPTH_A, b=DEPTH_B, rmax_m=2000.0):
+    """Depth from the half-amplitude radius of the azimuthally averaged profile.
+
+    ``depth = a + b * half-width``, with (a, b) fitted by src/calibrate_depth.py. The offset
+    matters because the profile is computed after 100 m of upward continuation, which widens
+    every anomaly by a roughly constant amount.
+    """
+    r, amp = radial_profile(asig, E, N, iy, ix, dx, rmax_m=rmax_m)
+    hw = halfwidth_from_profile(r, amp)
+    if not np.isfinite(hw) or hw <= 0:
+        return np.nan
+    return float(max(a + b * hw, 0.0))
 
 
 def euler_depth(tmi, dx, E, N, iy, ix, win=12, SI=3.0):
@@ -94,17 +154,29 @@ def monte_carlo_rank(tmi, dx, E, N, cfg, n_runs=150, seed=1, top_k=8):
                 dh = depth_halfwidth(asig, E, N, p["iy"], p["ix"], dx)
                 if not np.isnan(dh):
                     depths[i].append(dh)
-    amax = amps.max() or 1.0
+    if len(base) == 0:
+        return [], detr
+    # amps[i] accumulates the amplitude on every hit, so divide by the hit count before
+    # normalising: score must be p x (mean amplitude), not p x (sum) = p^2 x mean.
+    mean_amps = np.divide(amps, hits, out=np.zeros_like(amps), where=hits > 0)
+    amax = mean_amps.max() or 1.0
     out = []
     for i, bc in enumerate(base):
         p = hits[i] / n_runs
-        dz = np.array(depths[i]) if depths[i] else np.array([np.nan])
+        if depths[i]:
+            dz = np.asarray(depths[i], dtype=float)
+            med = float(np.nanmedian(dz))
+            iqr = float(np.nanpercentile(dz, 75) - np.nanpercentile(dz, 25))
+            depth_median = round(med) if np.isfinite(med) else None
+            depth_iqr = round(iqr) if np.isfinite(iqr) else None
+        else:
+            depth_median, depth_iqr = None, None
         out.append({"east": round(bc["east"]), "north": round(bc["north"]),
                     "detection_prob": round(float(p), 3),
-                    "depth_median_m": round(float(np.nanmedian(dz))),
-                    "depth_iqr_m": round(float(np.nanpercentile(dz, 75) - np.nanpercentile(dz, 25))) if depths[i] else np.nan,
-                    "amp_norm": round(float(amps[i] / amax), 3),
-                    "score": round(float(p * amps[i] / amax), 3)})
+                    "depth_median_m": depth_median,
+                    "depth_iqr_m": depth_iqr,
+                    "amp_norm": round(float(mean_amps[i] / amax), 3),
+                    "score": round(float(p * mean_amps[i] / amax), 3)})
     out.sort(key=lambda z: -z["score"])
     for k, z in enumerate(out, 1):
         z["rank"] = k

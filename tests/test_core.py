@@ -71,3 +71,45 @@ def _run_all():
 
 if __name__ == "__main__":
     _run_all()
+
+
+def test_coarse_grid_does_not_crash():
+    """The real-data path uses ~2 km spacing; rr = int(800/dx) used to become 0,
+    collapsing the search window to one pixel and raising ValueError on round(nan)."""
+    cfg = fm.SurveyConfig(n=11, extent=20000.0)          # dx = 2000 m
+    g = fm.tmi_grid(cfg, fm.default_scene())
+    assert g["dx"] == 2000.0
+    targets, _ = tg.monte_carlo_rank(g["tmi"], g["dx"], g["E"], g["N"], cfg, n_runs=3)
+    assert isinstance(targets, list)                      # no ValueError, empty is acceptable
+    for t in targets:
+        assert t["depth_median_m"] is None or isinstance(t["depth_median_m"], int)
+
+
+def test_score_does_not_double_count_probability():
+    """score must be p x mean amplitude, not p x sum = p^2 x amplitude."""
+    cfg = fm.SurveyConfig()
+    g = fm.tmi_grid(cfg, fm.default_scene())
+    targets, _ = tg.monte_carlo_rank(g["tmi"], g["dx"], g["E"], g["N"], cfg, n_runs=40)
+    for t in targets:
+        assert abs(t["score"] - t["detection_prob"] * t["amp_norm"]) < 0.002
+
+
+def test_depth_estimator_tracks_depth_under_noise():
+    """The azimuthally averaged half-width must recover depth across the usable range.
+
+    The old single-pixel estimator returned +91 m at 300 m and -772 m at 1200 m at the same
+    noise level; this pins the replacement to a much tighter band.
+    """
+    errors = []
+    for depth in (300.0, 600.0, 900.0):
+        for seed in (1, 2, 3):
+            cfg = fm.SurveyConfig(seed=seed)
+            g = fm.tmi_grid(cfg, [fm.Body(0.0, 0.0, depth, 0.2, 4.0e7)])
+            detr, _ = pf.polynomial_detrend(g["tmi"], g["E"], g["N"], order=1)
+            asig = pf.analytic_signal(pf.upward_continue(detr, g["dx"], 100.0), g["dx"])
+            iy, ix = np.unravel_index(np.argmax(asig), asig.shape)
+            est = tg.depth_halfwidth(asig, g["E"], g["N"], iy, ix, g["dx"])
+            assert np.isfinite(est)
+            errors.append(est - depth)
+    assert abs(float(np.mean(errors))) < 40.0, errors
+    assert max(abs(e) for e in errors) < 80.0, errors
